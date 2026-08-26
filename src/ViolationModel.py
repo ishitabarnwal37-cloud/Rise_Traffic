@@ -1,13 +1,10 @@
 import pandas as pd
 import numpy as np
 import ast
-from sklearn.ensemble import RandomForestClassifier
+from catboost import CatBoostClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score,classification_report
-from sklearn.model_selection import train_test_split
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder,MultiLabelBinarizer
+from sklearn.preprocessing import MultiLabelBinarizer
 
 df = pd.read_csv('Datasets/bangalore-police-traffic-violation-dataset-2023.csv')
 df.info()
@@ -46,23 +43,16 @@ for c in cat_features:
 
 x_train,x_test,y_train,y_test = train_test_split(x,y,test_size=0.2,random_state=42)
 
-preprocessor = ColumnTransformer(
-    transformers=[
-        ("categorical",OneHotEncoder(handle_unknown="ignore"),cat_features),
-        ("numeric","passthrough",num_features)
-    ]
-)
-
-model = RandomForestClassifier(n_estimators=50,max_depth=20,min_samples_leaf=5,random_state=42,n_jobs=-1)
-
-pipeline = Pipeline(
-    steps=[
-        ("preprocessor",preprocessor),
-        ("model",model)
-    ]
-)
-
-pipeline.fit(x_train,y_train)
-y_pred = pipeline.predict(x_test)
-
-print(f"violation results :\nAccuracy : {accuracy_score(y_test,y_pred)}\nClassification Report:\n{classification_report(y_test,y_pred,zero_division=0)}")
+models = {}
+predictions = np.zeros_like(y_test)
+for i , v in enumerate(mlb.classes_):
+    print(f"Training catboost for : {v}")
+    model = CatBoostClassifier(iterations=500,depth=6,learning_rate=0.1,verbose=50,loss_function="Logloss",eval_metric="Accuracy",random_seed=42)
+    model.fit(x_train,y_train[:,1],cat_features=cat_features)
+    predictions[:,1] = model.predict(x_test).flatten()
+    models[v] = model
+    
+predictions = predictions.astype(int)
+print("MULTILABEL CATBOOST RESULTS : ")
+print(f"Subset Accuracy : {accuracy_score(y_test,predictions)}")
+print(classification_report(y_test,predictions,target_names=mlb.classes_,zero_division=0))
